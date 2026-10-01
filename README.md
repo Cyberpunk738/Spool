@@ -48,6 +48,9 @@ Milestone 0 is implemented as a runnable vertical slice.
 - Bounded timeline undo/redo history
 - Debounced IndexedDB autosave of project state and original media blobs
 - Automatic local project restoration with visible save and failure states
+- Full multi-clip sequence export with normalized framing and continuous audio
+- Automatic silence generation for source clips without audio
+- Real browser integration fixture with independent MP4 decoding and duration verification
 - Self-hosted, single-threaded FFmpeg.wasm runtime
 - Precise decode-and-reencode trimming
 - Landscape MP4 output at 1280 × 720 and 30 fps
@@ -63,10 +66,8 @@ Milestone 0 is implemented as a runnable vertical slice.
 
 ### Not implemented yet
 
-- Composed export of the complete multi-clip sequence (selected-range export remains available)
 - Timed text overlays
 - Background music and volume controls
-- Full integration fixture and end-to-end browser automation
 
 ## Getting started
 
@@ -96,6 +97,7 @@ The install step copies the pinned single-thread FFmpeg core into `public/media-
 | `npm run preview` | Serve the production build locally |
 | `npm run typecheck` | Run strict TypeScript checks |
 | `npm test` | Run the Vitest suite |
+| `npm run test:integration` | Export two real timeline clips in Chrome and independently verify the MP4 |
 
 ## How the current export works
 

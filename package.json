@@ -9,6 +9,7 @@
     "demo": "node scripts/create-demo.mjs",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:integration": "node scripts/test-timeline-export.mjs",
     "typecheck": "tsc -b --pretty false",
     "postinstall": "node scripts/copy-media-engine.mjs"
   },

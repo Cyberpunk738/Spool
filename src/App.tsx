@@ -116,8 +116,11 @@ export default function App() {
 
   const isWorking = ['loading-engine', 'preparing', 'encoding', 'finalizing'].includes(stage)
   const trimDuration = Math.max(0, end - start)
+  const sequenceDuration = timelineDuration(clips)
   const output = OUTPUT_PRESETS[preset]
-  const canExport = Boolean(file && media && trimDuration > 0 && trimDuration <= MAX_OUTPUT_SECONDS && !isWorking)
+  const canExport = clips.length
+    ? sequenceDuration > 0 && sequenceDuration <= MAX_OUTPUT_SECONDS && !isWorking
+    : Boolean(file && media && trimDuration > 0 && trimDuration <= MAX_OUTPUT_SECONDS && !isWorking)
 
   const selectedAsset = assets.find((asset) => asset.file === file)
 
@@ -393,7 +396,7 @@ export default function App() {
   }
 
   const exportVideo = async () => {
-    if (!file || !media || !canExport) return
+    if (!canExport) return
     setError(null)
     resetResult()
     const engine = engineRef.current ?? new FfmpegEngine()
@@ -401,24 +404,35 @@ export default function App() {
     const startedAt = performance.now()
 
     try {
-      const blob = await engine.exportTrimmed({
-        source: file,
-        startSeconds: start,
-        endSeconds: end,
-        output: { width: output.width, height: output.height, background },
-        onUpdate: (update) => {
-          setStage(update.stage)
-          setStatus(update.detail)
-          setProgress(update.progress)
-        },
-      })
+      const onUpdate = (update: { stage: ExportStage; detail: string; progress?: number }) => {
+        setStage(update.stage)
+        setStatus(update.detail)
+        setProgress(update.progress)
+      }
+      const blob = clips.length
+        ? await engine.exportTimeline({
+          assets: assets.map((asset) => ({ id: asset.id, file: asset.file })),
+          clips,
+          output: { width: output.width, height: output.height, background },
+          onUpdate,
+        })
+        : file && media
+          ? await engine.exportTrimmed({
+            source: file,
+            startSeconds: start,
+            endSeconds: end,
+            output: { width: output.width, height: output.height, background },
+            onUpdate,
+          })
+          : null
+      if (!blob) throw new Error('Choose a video or add clips to the timeline before exporting.')
       const url = URL.createObjectURL(blob)
       resultUrlRef.current = url
       setResultUrl(url)
       setElapsed((performance.now() - startedAt) / 1000)
       setStage('complete')
       setProgress(1)
-      setStatus('Export complete. Play the independent result below before downloading.')
+      setStatus(`${clips.length ? 'Timeline' : 'Clip'} export complete. Play the independent result below before downloading.`)
     } catch (caught) {
       const cancelled = caught instanceof DOMException && caught.name === 'AbortError'
       setStage(cancelled ? 'cancelled' : 'failed')
@@ -607,7 +621,7 @@ export default function App() {
             </div>
             <button className="primary-button full" onClick={exportVideo} disabled={!canExport}>
               {isWorking ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />}
-              {isWorking ? 'Exporting…' : 'Export MP4'}
+              {isWorking ? 'Exporting…' : clips.length ? `Export ${clips.length} clips` : 'Export MP4'}
             </button>
             {isWorking && <button className="cancel-button" onClick={cancelExport}>Cancel export</button>}
           </aside>
@@ -684,7 +698,9 @@ export default function App() {
                 </div>
               )
             })()}
-            <p className="sequence-note">Export currently targets the selected source range. Full sequence composition is the next export milestone.</p>
+            {sequenceDuration > MAX_OUTPUT_SECONDS
+              ? <p className="sequence-note error-note">Sequence is {formatTime(sequenceDuration)}. Shorten it to the 60-second export limit.</p>
+              : <p className="sequence-note">Export will compose this complete sequence with continuous source audio and generated silence where needed.</p>}
           </section>
         )}
 
