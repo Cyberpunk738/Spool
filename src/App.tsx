@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   CheckCircle2,
   ChevronDown,
@@ -11,20 +11,31 @@ import {
   LoaderCircle,
   Play,
   Pause,
+  Plus,
+  Redo2,
   SkipBack,
   SkipForward,
+  Trash2,
+  Undo2,
   Scissors,
   ShieldCheck,
   Sparkles,
-  X,
 } from 'lucide-react'
 import { FfmpegEngine, type ExportStage } from './services/ffmpegEngine'
+import { moveClip, removeClip, splitClip, timelineDuration, type TimelineClip } from './domain/timeline'
+import { loadProject, saveProject } from './services/projectPersistence'
 
 type MediaDetails = {
   duration: number
   width: number
   height: number
   url: string
+}
+
+type MediaAsset = {
+  id: string
+  file: File
+  media: MediaDetails
 }
 
 type OutputPreset = 'landscape' | 'portrait' | 'square'
@@ -77,6 +88,7 @@ function readVideoMetadata(file: File): Promise<MediaDetails> {
 export default function App() {
   const engineRef = useRef<FfmpegEngine | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const assetsRef = useRef<MediaAsset[]>([])
   const resultUrlRef = useRef<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [media, setMedia] = useState<MediaDetails | null>(null)
@@ -94,26 +106,97 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [loopSelection, setLoopSelection] = useState(true)
   const [thumbnails, setThumbnails] = useState<string[]>([])
+  const [assets, setAssets] = useState<MediaAsset[]>([])
+  const [clips, setClips] = useState<TimelineClip[]>([])
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null)
+  const [undoStack, setUndoStack] = useState<TimelineClip[][]>([])
+  const [redoStack, setRedoStack] = useState<TimelineClip[][]>([])
+  const [hydrated, setHydrated] = useState(false)
+  const [saveState, setSaveState] = useState<'local' | 'saving' | 'saved' | 'failed'>('local')
 
   const isWorking = ['loading-engine', 'preparing', 'encoding', 'finalizing'].includes(stage)
   const trimDuration = Math.max(0, end - start)
   const output = OUTPUT_PRESETS[preset]
   const canExport = Boolean(file && media && trimDuration > 0 && trimDuration <= MAX_OUTPUT_SECONDS && !isWorking)
 
-  const sizeLabel = useMemo(() => {
-    if (!file) return ''
-    return file.size > 1024 * 1024
-      ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
-      : `${Math.ceil(file.size / 1024)} KB`
-  }, [file])
+  const selectedAsset = assets.find((asset) => asset.file === file)
+
+  useEffect(() => {
+    assetsRef.current = assets
+  }, [assets])
+
+  useEffect(() => {
+    let cancelled = false
+    const restore = async () => {
+      try {
+        const saved = await loadProject()
+        if (!saved || cancelled) return
+        const restored: MediaAsset[] = []
+        for (const stored of saved.assets) {
+          const restoredFile = new File([stored.blob], stored.name, { type: stored.type, lastModified: stored.lastModified })
+          const restoredMedia = await readVideoMetadata(restoredFile)
+          restored.push({ id: stored.id, file: restoredFile, media: restoredMedia })
+        }
+        if (cancelled) {
+          for (const asset of restored) URL.revokeObjectURL(asset.media.url)
+          return
+        }
+        setAssets(restored)
+        setClips(saved.clips)
+        setPreset(saved.preset)
+        setBackground(saved.background)
+        if (restored[0]) {
+          setFile(restored[0].file)
+          setMedia(restored[0].media)
+          setEnd(Math.min(restored[0].media.duration, MAX_OUTPUT_SECONDS))
+          setStatus('Local project restored from this browser.')
+        }
+        setSaveState('saved')
+      } catch (caught) {
+        if (!cancelled) {
+          setSaveState('failed')
+          setError(caught instanceof Error ? caught.message : 'The local project could not be restored.')
+        }
+      } finally {
+        if (!cancelled) setHydrated(true)
+      }
+    }
+    void restore()
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    if (!hydrated || !assets.length) return
+    setSaveState('saving')
+    const timeout = window.setTimeout(() => {
+      void saveProject({
+        schemaVersion: 1,
+        assets: assets.map((asset) => ({
+          id: asset.id,
+          name: asset.file.name,
+          type: asset.file.type,
+          lastModified: asset.file.lastModified,
+          blob: asset.file,
+        })),
+        clips,
+        preset,
+        background,
+        updatedAt: new Date().toISOString(),
+      }).then(() => setSaveState('saved')).catch((caught: unknown) => {
+        setSaveState('failed')
+        setError(caught instanceof Error ? caught.message : 'Local autosave failed.')
+      })
+    }, 700)
+    return () => window.clearTimeout(timeout)
+  }, [assets, background, clips, hydrated, preset])
 
   useEffect(() => {
     return () => {
       engineRef.current?.dispose()
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
-      if (media?.url) URL.revokeObjectURL(media.url)
+      for (const asset of assetsRef.current) URL.revokeObjectURL(asset.media.url)
     }
-  }, [media?.url])
+  }, [])
 
   useEffect(() => {
     if (!media) {
@@ -198,29 +281,114 @@ export default function App() {
     setElapsed(null)
   }
 
-  const chooseFile = async (selected: File | undefined) => {
-    if (!selected) return
+  const chooseFiles = async (selectedFiles: FileList | File[] | null | undefined) => {
+    if (!selectedFiles?.length) return
     setError(null)
     resetResult()
-    if (selected.size > MAX_FILE_BYTES) {
-      setError('That file exceeds Spool’s 250 MB first-release limit.')
+    const incoming = Array.from(selectedFiles)
+    if (assets.length + incoming.length > 5) {
+      setError('Spool supports up to five source videos in this release.')
+      return
+    }
+    if (assets.reduce((sum, asset) => sum + asset.file.size, 0) + incoming.reduce((sum, item) => sum + item.size, 0) > MAX_FILE_BYTES) {
+      setError('Those files exceed Spool’s 250 MB project limit.')
       return
     }
 
     try {
-      setStatus('Reading video metadata…')
-      const details = await readVideoMetadata(selected)
-      if (media?.url) URL.revokeObjectURL(media.url)
-      setFile(selected)
-      setMedia(details)
+      setStatus(`Reading ${incoming.length} video${incoming.length === 1 ? '' : 's'}…`)
+      const imported = await Promise.all(incoming.map(async (selected) => ({
+        id: crypto.randomUUID(),
+        file: selected,
+        media: await readVideoMetadata(selected),
+      })))
+      const first = imported[0]
+      setAssets((current) => [...current, ...imported])
+      setFile(first.file)
+      setMedia(first.media)
       setStart(0)
-      setEnd(Math.min(details.duration, MAX_OUTPUT_SECONDS))
+      setEnd(Math.min(first.media.duration, MAX_OUTPUT_SECONDS))
       setPlayhead(0)
       setStage('idle')
-      setStatus('Ready to trim and export locally.')
+      setStatus('Media imported. Add the clips you want to the timeline.')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'The selected file could not be opened.')
       setStatus('Choose another video to continue.')
+    }
+  }
+
+  const selectAsset = (asset: MediaAsset) => {
+    videoRef.current?.pause()
+    setFile(asset.file)
+    setMedia(asset.media)
+    setStart(0)
+    setEnd(Math.min(asset.media.duration, MAX_OUTPUT_SECONDS))
+    setPlayhead(0)
+    resetResult()
+  }
+
+  const commitClips = (next: TimelineClip[]) => {
+    if (next === clips) return
+    setUndoStack((history) => [...history.slice(-49), clips])
+    setRedoStack([])
+    setClips(next)
+  }
+
+  const addSelectedAsset = () => {
+    if (!selectedAsset || !media) return
+    const clip: TimelineClip = {
+      id: crypto.randomUUID(),
+      assetId: selectedAsset.id,
+      sourceIn: start,
+      sourceOut: end,
+    }
+    commitClips([...clips, clip])
+    setSelectedClipId(clip.id)
+  }
+
+  const selectTimelineClip = (clip: TimelineClip) => {
+    const asset = assets.find((candidate) => candidate.id === clip.assetId)
+    if (!asset) return
+    selectAsset(asset)
+    setStart(clip.sourceIn)
+    setEnd(clip.sourceOut)
+    setSelectedClipId(clip.id)
+    seek(clip.sourceIn)
+  }
+
+  const undo = () => {
+    const previous = undoStack.at(-1)
+    if (!previous) return
+    setRedoStack((history) => [...history, clips])
+    setClips(previous)
+    setUndoStack((history) => history.slice(0, -1))
+    if (selectedClipId && !previous.some((clip) => clip.id === selectedClipId)) setSelectedClipId(null)
+  }
+
+  const redo = () => {
+    const next = redoStack.at(-1)
+    if (!next) return
+    setUndoStack((history) => [...history, clips])
+    setClips(next)
+    setRedoStack((history) => history.slice(0, -1))
+  }
+
+  const saveNow = async () => {
+    if (!assets.length) return
+    setSaveState('saving')
+    try {
+      await saveProject({
+        schemaVersion: 1,
+        assets: assets.map((asset) => ({ id: asset.id, name: asset.file.name, type: asset.file.type, lastModified: asset.file.lastModified, blob: asset.file })),
+        clips,
+        preset,
+        background,
+        updatedAt: new Date().toISOString(),
+      })
+      setSaveState('saved')
+    } catch (caught) {
+      setSaveState('failed')
+      setError(caught instanceof Error ? caught.message : 'Local save failed. Check browser storage permissions and quota.')
     }
   }
 
@@ -317,7 +485,9 @@ export default function App() {
         </div>
         <div className="top-actions">
           <span className="local-pill"><ShieldCheck size={14} /> Your media stays on this device</span>
-          <button className="ghost-button" disabled>Save project</button>
+          <button className={`ghost-button save-${saveState}`} onClick={() => void saveNow()} disabled={!assets.length || saveState === 'saving'}>
+            {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved locally' : saveState === 'failed' ? 'Save failed · Retry' : 'Save project'}
+          </button>
           <button className="primary-button compact" onClick={exportVideo} disabled={!canExport}>
             <Sparkles size={16} /> Export
           </button>
@@ -335,21 +505,30 @@ export default function App() {
           <aside className="side-panel">
             <div className="panel-heading">
               <div><span className="step">01</span><h2>Source</h2></div>
-              {file && <button className="icon-button" aria-label="Remove video" onClick={() => { setFile(null); setMedia(null); resetResult() }}><X size={16} /></button>}
+              {file && <span className="asset-count">{assets.length}/5</span>}
             </div>
 
-            {!file ? (
+            {!assets.length ? (
               <label className="drop-zone">
-                <input type="file" accept="video/*" onChange={(event) => void chooseFile(event.target.files?.[0])} />
+                <input type="file" accept="video/*" multiple onChange={(event) => void chooseFiles(event.target.files)} />
                 <span className="upload-icon"><FolderOpen size={25} /></span>
-                <strong>Choose a video</strong>
-                <small>MP4, WebM, MOV · up to 250 MB</small>
+                <strong>Choose videos</strong>
+                <small>Up to 5 clips · 250 MB total</small>
               </label>
             ) : (
-              <div className="asset-card">
-                <div className="asset-thumb"><Film size={22} /></div>
-                <div className="asset-copy"><strong>{file.name}</strong><span>{sizeLabel} · {media ? formatTime(media.duration) : 'Reading…'}</span></div>
-                <CheckCircle2 className="success" size={18} />
+              <div className="media-bin">
+                {assets.map((asset) => (
+                  <button key={asset.id} className={asset.file === file ? 'asset-card selected' : 'asset-card'} onClick={() => selectAsset(asset)}>
+                    <div className="asset-thumb"><Film size={18} /></div>
+                    <div className="asset-copy"><strong>{asset.file.name}</strong><span>{(asset.file.size / (1024 * 1024)).toFixed(1)} MB · {formatTime(asset.media.duration)}</span></div>
+                    {asset.file === file && <CheckCircle2 className="success" size={16} />}
+                  </button>
+                ))}
+                <label className="add-media">
+                  <input type="file" accept="video/*" multiple onChange={(event) => void chooseFiles(event.target.files)} />
+                  <Plus size={14} /> Import more
+                </label>
+                <button className="add-timeline" onClick={addSelectedAsset}><Plus size={14} /> Add selection to timeline</button>
               </div>
             )}
 
@@ -460,6 +639,55 @@ export default function App() {
           </section>
         )}
 
+        {clips.length > 0 && (
+          <section className="sequence-editor" aria-label="Clip timeline">
+            <div className="sequence-toolbar">
+              <div><span className="step">04</span><div><h2>Sequence</h2><p>Clips ripple automatically · {formatTime(timelineDuration(clips))} total</p></div></div>
+              <div className="history-actions">
+                <button onClick={undo} disabled={!undoStack.length} aria-label="Undo"><Undo2 size={15} /></button>
+                <button onClick={redo} disabled={!redoStack.length} aria-label="Redo"><Redo2 size={15} /></button>
+              </div>
+            </div>
+            <div className="clip-lane">
+              {clips.map((clip, index) => {
+                const asset = assets.find((candidate) => candidate.id === clip.assetId)
+                const duration = clip.sourceOut - clip.sourceIn
+                return (
+                  <button
+                    key={clip.id}
+                    className={selectedClipId === clip.id ? 'timeline-clip selected' : 'timeline-clip'}
+                    style={{ flexGrow: Math.max(1, duration) }}
+                    onClick={() => selectTimelineClip(clip)}
+                  >
+                    <span className="clip-index">{String(index + 1).padStart(2, '0')}</span>
+                    <strong>{asset?.file.name ?? 'Missing asset'}</strong>
+                    <small>{formatTime(duration)}</small>
+                  </button>
+                )
+              })}
+            </div>
+            {selectedClipId && (() => {
+              const selected = clips.find((clip) => clip.id === selectedClipId)
+              const index = clips.findIndex((clip) => clip.id === selectedClipId)
+              if (!selected) return null
+              return (
+                <div className="clip-actions">
+                  <button disabled={index === 0} onClick={() => commitClips(moveClip(clips, selected.id, -1))}>← Move earlier</button>
+                  <button onClick={() => {
+                    const next = splitClip(clips, selected.id, playhead)
+                    if (next === clips) { setError('Move the playhead inside the selected clip before splitting.'); return }
+                    commitClips(next)
+                    setSelectedClipId(next[index + 1].id)
+                  }}><Scissors size={13} /> Split at playhead</button>
+                  <button disabled={index === clips.length - 1} onClick={() => commitClips(moveClip(clips, selected.id, 1))}>Move later →</button>
+                  <button className="danger-action" onClick={() => { commitClips(removeClip(clips, selected.id)); setSelectedClipId(null) }}><Trash2 size={13} /> Delete</button>
+                </div>
+              )
+            })()}
+            <p className="sequence-note">Export currently targets the selected source range. Full sequence composition is the next export milestone.</p>
+          </section>
+        )}
+
         <section className={`status-card status-${stage}`} aria-live="polite">
           <div className="status-icon">{isWorking ? <LoaderCircle className="spin" /> : stage === 'complete' ? <CheckCircle2 /> : <Info />}</div>
           <div className="status-copy"><strong>{status}</strong><span>{progress !== undefined && isWorking ? 'Measured encoder progress' : 'No upload. No server. No surprises.'}</span></div>
@@ -470,7 +698,7 @@ export default function App() {
 
         {resultUrl && (
           <section className="result-card">
-            <div className="result-copy"><span className="step">04</span><div><h2>Your cut is ready</h2><p>Encoded in {elapsed?.toFixed(1)} seconds. Verify playback, then save the MP4.</p></div></div>
+            <div className="result-copy"><span className="step">05</span><div><h2>Your cut is ready</h2><p>Encoded in {elapsed?.toFixed(1)} seconds. Verify playback, then save the MP4.</p></div></div>
             <video src={resultUrl} controls playsInline />
             <a className="primary-button download" href={resultUrl} download={`spool-export-${Date.now()}.mp4`}><Download size={18} /> Download MP4</a>
           </section>

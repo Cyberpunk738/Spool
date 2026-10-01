@@ -43,6 +43,11 @@ Milestone 0 is implemented as a runnable vertical slice.
 - Draggable frame-grid In/Out handles and clickable timeline seeking
 - Looped selection preview with previous/next frame controls
 - Keyboard editing shortcuts: `I`, `O`, arrow keys, and Space
+- Media bin with up to five imported source videos and explicit timeline insertion
+- Contiguous multi-clip sequence with split, reorder, ripple delete, and selection
+- Bounded timeline undo/redo history
+- Debounced IndexedDB autosave of project state and original media blobs
+- Automatic local project restoration with visible save and failure states
 - Self-hosted, single-threaded FFmpeg.wasm runtime
 - Precise decode-and-reencode trimming
 - Landscape MP4 output at 1280 × 720 and 30 fps
@@ -58,11 +63,9 @@ Milestone 0 is implemented as a runnable vertical slice.
 
 ### Not implemented yet
 
-- Multi-clip timeline and media bin (the current precision trimmer handles one source)
-- Split, reorder, ripple delete, and undo/redo
+- Composed export of the complete multi-clip sequence (selected-range export remains available)
 - Timed text overlays
 - Background music and volume controls
-- IndexedDB project persistence
 - Full integration fixture and end-to-end browser automation
 
 ## Getting started
