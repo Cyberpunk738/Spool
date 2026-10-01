@@ -14,6 +14,19 @@ export interface PersistedProject {
   clips: TimelineClip[]
   preset: 'landscape' | 'portrait' | 'square'
   background: string
+  textOverlay?: {
+    id: string
+    text: string
+    start: number
+    end: number
+    x: number
+    y: number
+    fontSize: number
+    colour: string
+    background: string
+  }
+  music?: { name: string; type: string; lastModified: number; blob: Blob; gain: number; offset: number }
+  sourceGain?: number
   updatedAt: string
 }
 

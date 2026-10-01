@@ -48,6 +48,9 @@ try {
   await page.getByRole('spinbutton', { name: 'End' }).fill('3.5')
   await page.getByRole('spinbutton', { name: 'Start' }).fill('2')
   await page.getByText('Add selection to timeline').click()
+  await page.getByRole('button', { name: 'Add text overlay' }).click()
+  await page.getByLabel('Overlay text').fill('Spool integration test')
+  await page.locator('label.tool-add input[type="file"]').setInputFiles(fixture)
   await page.getByRole('button', { name: 'Export 2 clips' }).click()
   try {
     await page.locator('.result-card video').waitFor({ state: 'visible', timeout: 180_000 })

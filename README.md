@@ -18,7 +18,7 @@ npm run demo
 
 The demo script creates synthetic media, launches the local app, captures the populated editor, and produces a verified 1080p H.264/AAC MP4. It does not use personal media or upload anything.
 
-The project is being built from the export path outward. The current milestone is a functional export lab that imports a local video, makes a precise trim, and encodes a downloadable MP4 entirely in the browser.
+The project is built from the export path outward: import local media, assemble a multi-clip sequence, add timed text and music, restore the project after reload, and encode a downloadable MP4 entirely in the browser.
 
 ## Why Spool?
 
@@ -32,7 +32,7 @@ Most web video tools begin by uploading your footage. Spool takes a different ap
 
 ## Current state
 
-Milestone 0 is implemented as a runnable vertical slice.
+The core local editing workflow is implemented as a runnable vertical slice.
 
 ### Working now
 
@@ -51,6 +51,9 @@ Milestone 0 is implemented as a runnable vertical slice.
 - Full multi-clip sequence export with normalized framing and continuous audio
 - Automatic silence generation for source clips without audio
 - Real browser integration fixture with independent MP4 decoding and duration verification
+- Timed multiline text with positioning, sizing, colour, preview, and burned-in export
+- Background music import with offset and independent source/music gain
+- Music mixing that preserves the project duration and source soundtrack
 - Self-hosted, single-threaded FFmpeg.wasm runtime
 - Precise decode-and-reencode trimming
 - Landscape MP4 output at 1280 × 720 and 30 fps
@@ -63,11 +66,6 @@ Milestone 0 is implemented as a runnable vertical slice.
 - Clean engine recreation when retrying after cancellation
 - Independent playback and download of the exported file
 - Responsive interface with self-hosted fonts
-
-### Not implemented yet
-
-- Timed text overlays
-- Background music and volume controls
 
 ## Getting started
 
@@ -157,13 +155,13 @@ These are product limits, not guarantees that every file below them will decode 
 
 ## Roadmap
 
-1. Verify export with real audio and silent-video fixtures, including cancel/retry.
-2. Add the versioned project model and pure timeline operations.
-3. Build the media bin, preview transport, and single-track timeline.
-4. Add shared text rasterization for preview and export.
-5. Add source-audio and background-music mixing.
-6. Persist projects and media blobs transactionally in IndexedDB.
-7. Complete production deployment and the full two-clip release scenario.
+The core first-release workflow is complete. Next up:
+
+1. Support multiple simultaneous text overlays with direct canvas positioning.
+2. Add an audio waveform and timeline-synchronised music preview.
+3. Expand export coverage for silent videos, corrupt inputs, cancellation, and storage limits.
+4. Add more transitions and motion presets while keeping export deterministic.
+5. Deploy the static production build and verify WebAssembly MIME and caching headers.
 
 ## Verification
 
@@ -180,7 +178,7 @@ Do not treat a mocked engine test as proof that export works. Release evidence m
 
 ## Privacy
 
-Spool does not upload imported video or project content. Files are read by browser APIs and processed by the locally loaded WebAssembly engine. Future local persistence will use IndexedDB rather than placing media or base64 data in `localStorage`.
+Spool does not upload imported video or project content. Files are read by browser APIs, processed by the locally loaded WebAssembly engine, and persisted in IndexedDB on the user's device.
 
 ## Contributing
 

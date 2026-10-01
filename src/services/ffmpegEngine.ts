@@ -1,6 +1,6 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { fetchFile } from '@ffmpeg/util'
-import type { TimelineClip } from '../domain/timeline'
+import { timelineDuration, type TimelineClip } from '../domain/timeline'
 
 export type ExportStage =
   | 'idle'
@@ -34,6 +34,22 @@ export interface TimelineExportOptions {
   assets: Array<{ id: string; file: File }>
   clips: TimelineClip[]
   output: ExportOptions['output']
+  textOverlays?: Array<{
+    png: Blob
+    startSeconds: number
+    endSeconds: number
+    x: number
+    y: number
+    width: number
+    height: number
+  }>
+  music?: {
+    file: File
+    timelineStartSeconds: number
+    sourceInSeconds: number
+    gain: number
+  }
+  sourceGain?: number
   onUpdate: ExportOptions['onUpdate']
 }
 
@@ -142,7 +158,7 @@ export class FfmpegEngine {
   }
 
   async exportTimeline(options: TimelineExportOptions): Promise<Blob> {
-    const { assets, clips, output, onUpdate } = options
+    const { assets, clips, output, onUpdate, textOverlays = [], music, sourceGain = 1 } = options
     this.cancelled = false
     await this.load(onUpdate)
     if (this.cancelled) throw new DOMException('Export cancelled', 'AbortError')
@@ -235,7 +251,54 @@ export class FfmpegEngine {
         '-map', '0:v:0', '-map', '1:a:0', '-c', 'copy', '-shortest', '-movflags', '+faststart', outputName,
       ])
       if (muxExit !== 0) throw new Error('The final timeline MP4 could not be created.')
-      const data = await ffmpeg.readFile(outputName)
+      let currentOutput = outputName
+
+      for (let index = 0; index < textOverlays.length; index += 1) {
+        const overlay = textOverlays[index]
+        const pngName = `${job}-text-${index}.png`
+        const composedName = `${job}-text-composed-${index}.mp4`
+        temporaryFiles.push(pngName, composedName)
+        await ffmpeg.writeFile(pngName, await fetchFile(overlay.png))
+        const x = Math.round(overlay.x * output.width - overlay.width / 2)
+        const y = Math.round(overlay.y * output.height - overlay.height / 2)
+        onUpdate({ stage: 'finalizing', detail: `Compositing text ${index + 1} of ${textOverlays.length}…` })
+        const overlayExit = await ffmpeg.exec([
+          '-i', currentOutput, '-loop', '1', '-i', pngName,
+          '-filter_complex', `[0:v][1:v]overlay=${x}:${y}:enable='between(t\\,${overlay.startSeconds.toFixed(6)}\\,${overlay.endSeconds.toFixed(6)})'`,
+          '-map', '0:a:0', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'copy',
+          '-t', timelineDuration(clips).toFixed(6), composedName,
+        ])
+        if (overlayExit !== 0) throw new Error(`Text overlay ${index + 1} could not be composed.`)
+        currentOutput = composedName
+      }
+
+      if (music) {
+        const musicName = `${job}-music.${safeExtension(music.file)}`
+        const mixedName = `${job}-mixed.mp4`
+        temporaryFiles.push(musicName, mixedName)
+        await ffmpeg.writeFile(musicName, await fetchFile(music.file))
+        const delayMs = Math.max(0, Math.round(music.timelineStartSeconds * 1000))
+        onUpdate({ stage: 'finalizing', detail: 'Mixing background music and source audio…' })
+        const mixExit = await ffmpeg.exec([
+          '-i', currentOutput, '-i', musicName,
+          '-filter_complex', `[0:a]volume=${Math.max(0, Math.min(1, sourceGain)).toFixed(3)}[source];[1:a]atrim=start=${Math.max(0, music.sourceInSeconds).toFixed(6)},asetpts=PTS-STARTPTS,volume=${Math.max(0, Math.min(1, music.gain)).toFixed(3)},adelay=${delayMs}|${delayMs}[music];[source][music]amix=inputs=2:duration=first:normalize=0[audio]`,
+          '-map', '0:v:0', '-map', '[audio]', '-c:v', 'copy', '-c:a', 'aac', '-ar', '48000', '-ac', '2',
+          '-t', timelineDuration(clips).toFixed(6), '-movflags', '+faststart', mixedName,
+        ])
+        if (mixExit !== 0) throw new Error('Background music could not be mixed.')
+        currentOutput = mixedName
+      } else if (sourceGain < 1) {
+        const gainName = `${job}-gain.mp4`
+        temporaryFiles.push(gainName)
+        const gainExit = await ffmpeg.exec([
+          '-i', currentOutput, '-filter:a', `volume=${Math.max(0, Math.min(1, sourceGain)).toFixed(3)}`,
+          '-c:v', 'copy', '-c:a', 'aac', '-movflags', '+faststart', gainName,
+        ])
+        if (gainExit !== 0) throw new Error('Source audio gain could not be applied.')
+        currentOutput = gainName
+      }
+
+      const data = await ffmpeg.readFile(currentOutput)
       if (typeof data === 'string' || data.byteLength === 0) throw new Error('The timeline export was empty.')
       onUpdate({ stage: 'complete', progress: 1, detail: 'Timeline export complete.' })
       return new Blob([data.slice().buffer], { type: 'video/mp4' })

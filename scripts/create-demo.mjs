@@ -50,6 +50,9 @@ try {
   await page.goto('http://127.0.0.1:5173/', { waitUntil: 'networkidle' })
   await page.locator('input[type="file"]').setInputFiles(fixture)
   await page.locator('.precision-trimmer').waitFor({ state: 'visible' })
+  await page.getByText('Add selection to timeline').click()
+  await page.getByRole('button', { name: 'Add text overlay' }).click()
+  await page.getByLabel('Overlay text').fill('Made locally with Spool')
   await page.waitForTimeout(4500)
   await page.screenshot({ path: screenshot, fullPage: true })
 

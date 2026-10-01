@@ -16,7 +16,9 @@ import {
   SkipBack,
   SkipForward,
   Trash2,
+  Type,
   Undo2,
+  Music2,
   Scissors,
   ShieldCheck,
   Sparkles,
@@ -37,6 +39,20 @@ type MediaAsset = {
   file: File
   media: MediaDetails
 }
+
+type TextOverlay = {
+  id: string
+  text: string
+  start: number
+  end: number
+  x: number
+  y: number
+  fontSize: number
+  colour: string
+  background: string
+}
+
+type MusicAsset = { file: File; url: string; duration: number }
 
 type OutputPreset = 'landscape' | 'portrait' | 'square'
 
@@ -85,6 +101,46 @@ function readVideoMetadata(file: File): Promise<MediaDetails> {
   })
 }
 
+function readAudioMetadata(file: File): Promise<MusicAsset> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const audio = document.createElement('audio')
+    const timeout = window.setTimeout(() => { URL.revokeObjectURL(url); reject(new Error('Audio metadata timed out.')) }, 15_000)
+    audio.preload = 'metadata'
+    audio.onloadedmetadata = () => { window.clearTimeout(timeout); resolve({ file, url, duration: audio.duration }) }
+    audio.onerror = () => { window.clearTimeout(timeout); URL.revokeObjectURL(url); reject(new Error('This browser cannot decode the selected audio file.')) }
+    audio.src = url
+  })
+}
+
+async function rasterizeOverlay(overlay: TextOverlay): Promise<{ png: Blob; width: number; height: number }> {
+  await document.fonts.load(`600 ${overlay.fontSize}px Manrope`)
+  const lines = overlay.text.split('\n').slice(0, 5)
+  const measure = document.createElement('canvas').getContext('2d')
+  if (!measure) throw new Error('Canvas text rendering is unavailable.')
+  measure.font = `600 ${overlay.fontSize}px Manrope`
+  const padding = Math.round(overlay.fontSize * 0.35)
+  const lineHeight = Math.round(overlay.fontSize * 1.22)
+  const width = Math.max(2, Math.ceil(Math.max(...lines.map((line) => measure.measureText(line || ' ').width)) + padding * 2))
+  const height = Math.max(2, lineHeight * lines.length + padding * 2)
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('Canvas text rendering is unavailable.')
+  if (overlay.background !== 'transparent') {
+    context.fillStyle = overlay.background
+    context.fillRect(0, 0, width, height)
+  }
+  context.font = `600 ${overlay.fontSize}px Manrope`
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.fillStyle = overlay.colour
+  lines.forEach((line, index) => context.fillText(line, width / 2, padding + lineHeight * (index + 0.5)))
+  const png = await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Text rasterization failed.')), 'image/png'))
+  return { png, width, height }
+}
+
 export default function App() {
   const engineRef = useRef<FfmpegEngine | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -113,6 +169,11 @@ export default function App() {
   const [redoStack, setRedoStack] = useState<TimelineClip[][]>([])
   const [hydrated, setHydrated] = useState(false)
   const [saveState, setSaveState] = useState<'local' | 'saving' | 'saved' | 'failed'>('local')
+  const [textOverlay, setTextOverlay] = useState<TextOverlay | null>(null)
+  const [music, setMusic] = useState<MusicAsset | null>(null)
+  const [musicGain, setMusicGain] = useState(0.35)
+  const [sourceGain, setSourceGain] = useState(1)
+  const [musicOffset, setMusicOffset] = useState(0)
 
   const isWorking = ['loading-engine', 'preparing', 'encoding', 'finalizing'].includes(stage)
   const trimDuration = Math.max(0, end - start)
@@ -148,6 +209,14 @@ export default function App() {
         setClips(saved.clips)
         setPreset(saved.preset)
         setBackground(saved.background)
+        setTextOverlay(saved.textOverlay ?? null)
+        setSourceGain(saved.sourceGain ?? 1)
+        if (saved.music) {
+          const restoredMusicFile = new File([saved.music.blob], saved.music.name, { type: saved.music.type, lastModified: saved.music.lastModified })
+          setMusic(await readAudioMetadata(restoredMusicFile))
+          setMusicGain(saved.music.gain)
+          setMusicOffset(saved.music.offset)
+        }
         if (restored[0]) {
           setFile(restored[0].file)
           setMedia(restored[0].media)
@@ -184,6 +253,9 @@ export default function App() {
         clips,
         preset,
         background,
+        textOverlay: textOverlay ?? undefined,
+        music: music ? { name: music.file.name, type: music.file.type, lastModified: music.file.lastModified, blob: music.file, gain: musicGain, offset: musicOffset } : undefined,
+        sourceGain,
         updatedAt: new Date().toISOString(),
       }).then(() => setSaveState('saved')).catch((caught: unknown) => {
         setSaveState('failed')
@@ -191,7 +263,7 @@ export default function App() {
       })
     }, 700)
     return () => window.clearTimeout(timeout)
-  }, [assets, background, clips, hydrated, preset])
+  }, [assets, background, clips, hydrated, music, musicGain, musicOffset, preset, sourceGain, textOverlay])
 
   useEffect(() => {
     return () => {
@@ -386,6 +458,9 @@ export default function App() {
         clips,
         preset,
         background,
+        textOverlay: textOverlay ?? undefined,
+        music: music ? { name: music.file.name, type: music.file.type, lastModified: music.file.lastModified, blob: music.file, gain: musicGain, offset: musicOffset } : undefined,
+        sourceGain,
         updatedAt: new Date().toISOString(),
       })
       setSaveState('saved')
@@ -404,6 +479,9 @@ export default function App() {
     const startedAt = performance.now()
 
     try {
+      const rasterizedText = textOverlay?.text.trim()
+        ? [{ ...(await rasterizeOverlay(textOverlay)), startSeconds: textOverlay.start, endSeconds: textOverlay.end, x: textOverlay.x, y: textOverlay.y }]
+        : []
       const onUpdate = (update: { stage: ExportStage; detail: string; progress?: number }) => {
         setStage(update.stage)
         setStatus(update.detail)
@@ -414,6 +492,9 @@ export default function App() {
           assets: assets.map((asset) => ({ id: asset.id, file: asset.file })),
           clips,
           output: { width: output.width, height: output.height, background },
+          textOverlays: rasterizedText,
+          music: music ? { file: music.file, timelineStartSeconds: musicOffset, sourceInSeconds: 0, gain: musicGain } : undefined,
+          sourceGain,
           onUpdate,
         })
         : file && media
@@ -446,6 +527,17 @@ export default function App() {
     setStage('cancelled')
     setProgress(undefined)
     setStatus('Export cancelled. The engine will reload on your next attempt.')
+  }
+
+  const chooseMusic = async (selected: File | undefined) => {
+    if (!selected) return
+    try {
+      if (music) URL.revokeObjectURL(music.url)
+      setMusic(await readAudioMetadata(selected))
+      setError(null)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Music import failed.')
+    }
   }
 
   const seek = (time: number) => {
@@ -560,6 +652,11 @@ export default function App() {
                   <span><Play size={24} fill="currentColor" /></span>
                   <strong>Your preview lives here</strong>
                   <small>Import a clip to start shaping your story.</small>
+                </div>
+              )}
+              {textOverlay?.text && playhead >= textOverlay.start && playhead < textOverlay.end && (
+                <div className="preview-text" style={{ left: `${textOverlay.x * 100}%`, top: `${textOverlay.y * 100}%`, color: textOverlay.colour, background: textOverlay.background, fontSize: `${Math.max(12, textOverlay.fontSize * 0.5)}px` }}>
+                  {textOverlay.text}
                 </div>
               )}
             </div>
@@ -701,6 +798,37 @@ export default function App() {
             {sequenceDuration > MAX_OUTPUT_SECONDS
               ? <p className="sequence-note error-note">Sequence is {formatTime(sequenceDuration)}. Shorten it to the 60-second export limit.</p>
               : <p className="sequence-note">Export will compose this complete sequence with continuous source audio and generated silence where needed.</p>}
+          </section>
+        )}
+
+        {clips.length > 0 && (
+          <section className="composition-tools" aria-label="Text and audio tools">
+            <div className="composition-card">
+              <div className="tool-heading"><Type size={17} /><div><h2>Timed text</h2><p>The same bundled font and layout are burned into export.</p></div></div>
+              {!textOverlay ? (
+                <button className="tool-add" onClick={() => setTextOverlay({ id: crypto.randomUUID(), text: 'Your story starts here', start: 0, end: Math.min(3, sequenceDuration), x: 0.5, y: 0.82, fontSize: 56, colour: '#ffffff', background: '#11110fcc' })}><Plus size={14} /> Add text overlay</button>
+              ) : (
+                <div className="tool-fields">
+                  <textarea aria-label="Overlay text" rows={2} value={textOverlay.text} onChange={(event) => setTextOverlay({ ...textOverlay, text: event.target.value })} />
+                  <div className="field-row"><label>Start<input type="number" min="0" max={textOverlay.end} step="0.1" value={textOverlay.start} onChange={(event) => setTextOverlay({ ...textOverlay, start: Number(event.target.value) })} /></label><label>End<input type="number" min={textOverlay.start} max={sequenceDuration} step="0.1" value={textOverlay.end} onChange={(event) => setTextOverlay({ ...textOverlay, end: Number(event.target.value) })} /></label><label>Size<input type="number" min="18" max="140" value={textOverlay.fontSize} onChange={(event) => setTextOverlay({ ...textOverlay, fontSize: Number(event.target.value) })} /></label></div>
+                  <div className="field-row"><label>X<input type="range" min="0.05" max="0.95" step="0.01" value={textOverlay.x} onChange={(event) => setTextOverlay({ ...textOverlay, x: Number(event.target.value) })} /></label><label>Y<input type="range" min="0.05" max="0.95" step="0.01" value={textOverlay.y} onChange={(event) => setTextOverlay({ ...textOverlay, y: Number(event.target.value) })} /></label><label>Colour<input type="color" value={textOverlay.colour} onChange={(event) => setTextOverlay({ ...textOverlay, colour: event.target.value })} /></label></div>
+                  <button className="remove-tool" onClick={() => setTextOverlay(null)}><Trash2 size={13} /> Remove text</button>
+                </div>
+              )}
+            </div>
+            <div className="composition-card">
+              <div className="tool-heading"><Music2 size={17} /><div><h2>Background music</h2><p>Mix music with source audio without shortening the video.</p></div></div>
+              {!music ? (
+                <label className="tool-add"><input type="file" accept="audio/*" onChange={(event) => void chooseMusic(event.target.files?.[0])} /><Plus size={14} /> Choose music</label>
+              ) : (
+                <div className="tool-fields">
+                  <div className="music-file"><strong>{music.file.name}</strong><span>{formatTime(music.duration)}</span></div>
+                  <audio src={music.url} controls />
+                  <div className="field-row"><label>Source {Math.round(sourceGain * 100)}%<input type="range" min="0" max="1" step="0.01" value={sourceGain} onChange={(event) => setSourceGain(Number(event.target.value))} /></label><label>Music {Math.round(musicGain * 100)}%<input type="range" min="0" max="1" step="0.01" value={musicGain} onChange={(event) => setMusicGain(Number(event.target.value))} /></label><label>Starts at<input type="number" min="0" max={sequenceDuration} step="0.1" value={musicOffset} onChange={(event) => setMusicOffset(Number(event.target.value))} /></label></div>
+                  <button className="remove-tool" onClick={() => { URL.revokeObjectURL(music.url); setMusic(null) }}><Trash2 size={13} /> Remove music</button>
+                </div>
+              )}
+            </div>
           </section>
         )}
 
