@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <rect width="1920" height="1080" fill="#11110f"/>
+  <circle cx="960" cy="305" r="78" fill="none" stroke="#d9ff53" stroke-width="8"/>
+  <circle cx="960" cy="305" r="48" fill="none" stroke="#d9ff53" stroke-width="8"/>
+  <circle cx="960" cy="305" r="22" fill="#d9ff53"/>
+  <circle cx="960" cy="305" r="6" fill="#11110f"/>
+  <text x="960" y="500" fill="#ecebe4" font-family="Arial, sans-serif" font-size="84" font-weight="700" text-anchor="middle">Your footage stays yours.</text>
+  <text x="960" y="600" fill="#8d8d83" font-family="Arial, sans-serif" font-size="32" text-anchor="middle">Trim, frame, preview, and export entirely on your device.</text>
+  <g font-family="Arial, sans-serif" font-size="23" font-weight="700" text-anchor="middle">
+    <rect x="515" y="706" width="260" height="60" rx="4" fill="#20230f" stroke="#66752b"/><text x="645" y="744" fill="#d9ff53">FRAME-PRECISE</text>
+    <rect x="830" y="706" width="260" height="60" rx="4" fill="#20230f" stroke="#66752b"/><text x="960" y="744" fill="#d9ff53">NO UPLOADS</text>
+    <rect x="1145" y="706" width="260" height="60" rx="4" fill="#20230f" stroke="#66752b"/><text x="1275" y="744" fill="#d9ff53">REAL MP4</text>
+  </g>
+  <text x="960" y="915" fill="#55554e" font-family="monospace" font-size="22" letter-spacing="5" text-anchor="middle">SPOOL · LOCAL VIDEO TOOLS</text>
+</svg>

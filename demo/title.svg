@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="42%" r="58%"><stop offset="0" stop-color="#242913"/><stop offset="1" stop-color="#11110f"/></radialGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#glow)"/>
+  <g transform="translate(960 310)" fill="none" stroke="#d9ff53" stroke-width="9">
+    <circle r="92"/><circle r="62"/><circle r="31" fill="#d9ff53"/><circle r="9" fill="#11110f" stroke="none"/>
+  </g>
+  <text x="960" y="510" fill="#ecebe4" font-family="Arial, sans-serif" font-size="112" font-weight="700" text-anchor="middle">spool</text>
+  <text x="960" y="635" fill="#d9ff53" font-family="Georgia, serif" font-size="70" font-style="italic" text-anchor="middle">Make the cut. Keep the moment.</text>
+  <text x="960" y="740" fill="#8d8d83" font-family="Arial, sans-serif" font-size="28" letter-spacing="3" text-anchor="middle">PRIVATE · LOCAL · PRECISE</text>
+  <rect x="760" y="817" width="400" height="64" rx="5" fill="#d9ff53"/>
+  <text x="960" y="859" fill="#171a0b" font-family="Arial, sans-serif" font-size="25" font-weight="700" text-anchor="middle">BROWSER VIDEO EDITING</text>
+</svg>

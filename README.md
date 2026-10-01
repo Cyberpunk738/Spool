@@ -4,6 +4,20 @@
 
 Spool is a desktop-focused browser video editor built with React, TypeScript, and FFmpeg.wasm. Media stays on the user's device: there is no application backend, account system, cloud upload, or paid processing API.
 
+## Demo
+
+[![Watch the 14-second Spool demo](./demo/title.svg)](./demo/spool-demo.mp4)
+
+Click the image to watch the 14-second Spool demo, featuring the real editor populated with a locally generated test clip.
+
+Regenerate it at any time with:
+
+```bash
+npm run demo
+```
+
+The demo script creates synthetic media, launches the local app, captures the populated editor, and produces a verified 1080p H.264/AAC MP4. It does not use personal media or upload anything.
+
 The project is being built from the export path outward. The current milestone is a functional export lab that imports a local video, makes a precise trim, and encodes a downloadable MP4 entirely in the browser.
 
 ## Why Spool?
@@ -50,8 +64,6 @@ Milestone 0 is implemented as a runnable vertical slice.
 - Background music and volume controls
 - IndexedDB project persistence
 - Full integration fixture and end-to-end browser automation
-
-See [PROJECT.md](./PROJECT.md) for the product specification and [IMPLEMENTATION.md](./IMPLEMENTATION.md) for the milestone plan.
 
 ## Getting started
 
@@ -107,8 +119,7 @@ spool/
 │   ├── App.tsx             # Current export-lab UI and workflow
 │   ├── main.tsx
 │   └── styles.css
-├── PROJECT.md              # Product requirements and release gate
-└── IMPLEMENTATION.md       # Architecture and milestone sequence
+└── vite.config.ts          # Development and production build setup
 ```
 
 As the editor grows, pure timeline logic will live under `src/domain`, feature UI under `src/features`, and runtime-only media handles will remain separate from the serializable project document.
@@ -168,7 +179,7 @@ Spool does not upload imported video or project content. Files are read by brows
 
 ## Contributing
 
-Keep changes aligned with the milestone order in `IMPLEMENTATION.md`. In particular:
+Keep changes focused on working vertical slices and preserve the local-first architecture. In particular:
 
 - Preserve strict TypeScript boundaries.
 - Keep project state serializable and runtime media objects separate.

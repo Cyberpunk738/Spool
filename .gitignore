@@ -1,0 +1,15 @@
+node_modules
+dist
+.vite
+*.local
+playwright-report
+test-results
+PROJECT.md
+IMPLEMENTATION.md
+demo/chrome-profile*/
+demo/edge-profile/
+demo/spool-app.png
+demo/spool-editor.png
+demo/spool-fixture.mp4
+demo/title.png
+demo/outro.png
