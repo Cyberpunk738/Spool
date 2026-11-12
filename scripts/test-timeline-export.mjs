@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,13 +18,32 @@ function runFfmpeg(args) {
 }
 
 runFfmpeg([
-  '-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=30',
-  '-f', 'lavfi', '-i', 'sine=frequency=523:sample_rate=48000',
-  '-t', '4', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
-  '-c:a', 'aac', '-shortest', fixture,
+  '-f',
+  'lavfi',
+  '-i',
+  'testsrc2=size=640x360:rate=30',
+  '-f',
+  'lavfi',
+  '-i',
+  'sine=frequency=523:sample_rate=48000',
+  '-t',
+  '4',
+  '-c:v',
+  'libx264',
+  '-preset',
+  'ultrafast',
+  '-pix_fmt',
+  'yuv420p',
+  '-c:a',
+  'aac',
+  '-shortest',
+  fixture,
 ])
 
-const vite = spawn(process.execPath, [resolve(root, 'node_modules/vite/bin/vite.js'), '--host', '127.0.0.1'], { cwd: root, stdio: 'ignore' })
+const vite = spawn(process.execPath, [resolve(root, 'node_modules/vite/bin/vite.js'), '--host', '127.0.0.1'], {
+  cwd: root,
+  stdio: 'ignore',
+})
 for (let attempt = 0; attempt < 30; attempt += 1) {
   try {
     if ((await fetch('http://127.0.0.1:5173/')).ok) break
@@ -33,7 +53,26 @@ for (let attempt = 0; attempt < 30; attempt += 1) {
   await new Promise((resolveWait) => setTimeout(resolveWait, 250))
 }
 
-const browser = await chromium.launch({ executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', headless: true })
+const candidates = [
+  process.env.CHROME_PATH,
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+  '/usr/bin/google-chrome',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+].filter(Boolean)
+const executablePath = candidates.find((candidate) => existsSync(candidate))
+if (!executablePath) {
+  vite.kill()
+  throw new Error('Set CHROME_PATH to a Chrome/Chromium executable to run browser integration tests.')
+}
+let browser
+try {
+  browser = await chromium.launch({ executablePath, headless: true })
+} catch (error) {
+  vite.kill()
+  throw error
+}
 try {
   const context = await browser.newContext()
   const page = await context.newPage()
@@ -42,11 +81,11 @@ try {
   await page.locator('input[type="file"]').first().setInputFiles(fixture)
   await page.getByText('Add selection to timeline').waitFor()
 
-  await page.getByRole('spinbutton', { name: 'Start' }).fill('0')
-  await page.getByRole('spinbutton', { name: 'End' }).fill('1.5')
+  await page.locator('.inspector').getByRole('spinbutton', { name: 'Start', exact: true }).fill('0')
+  await page.locator('.inspector').getByRole('spinbutton', { name: 'End', exact: true }).fill('1.5')
   await page.getByText('Add selection to timeline').click()
-  await page.getByRole('spinbutton', { name: 'End' }).fill('3.5')
-  await page.getByRole('spinbutton', { name: 'Start' }).fill('2')
+  await page.locator('.inspector').getByRole('spinbutton', { name: 'End', exact: true }).fill('3.5')
+  await page.locator('.inspector').getByRole('spinbutton', { name: 'Start', exact: true }).fill('2')
   await page.getByText('Add selection to timeline').click()
   await page.getByRole('button', { name: 'Add text overlay' }).click()
   await page.getByLabel('Overlay text').fill('Spool integration test')
@@ -77,5 +116,5 @@ try {
   vite.kill()
 }
 
-runFfmpeg(['-i', exported, '-f', 'null', 'NUL'])
+runFfmpeg(['-i', exported, '-f', 'null', '-'])
 console.log(`Verified real timeline export: ${exported}`)

@@ -21,6 +21,7 @@ export interface ExportUpdate {
 export interface ExportOptions {
   source: File
   startSeconds: number
+  sourceGain?: number
   endSeconds: number
   output: {
     width: number
@@ -90,7 +91,7 @@ export class FfmpegEngine {
   }
 
   async exportTrimmed(options: ExportOptions): Promise<Blob> {
-    const { source, startSeconds, endSeconds, output, onUpdate } = options
+    const { source, startSeconds, endSeconds, output, onUpdate, sourceGain = 1 } = options
     this.cancelled = false
     await this.load(onUpdate)
     if (this.cancelled) throw new DOMException('Export cancelled', 'AbortError')
@@ -133,6 +134,7 @@ export class FfmpegEngine {
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-pix_fmt', 'yuv420p',
+        '-af', `volume=${Math.max(0, Math.min(1, sourceGain)).toFixed(3)}`,
         '-c:a', 'aac',
         '-ar', '48000',
         '-ac', '2',

@@ -4,6 +4,18 @@
 
 Spool is a desktop-focused browser video editor built with React, TypeScript, and FFmpeg.wasm. Media stays on the user's device: there is no application backend, account system, cloud upload, or paid processing API.
 
+## Studio refresh
+
+The editor uses a light canvas, forest-green controls, mint accents, rounded cards, and a responsive layout inspired by the supplied design reference.
+
+- **Source / Sequence preview:** play the complete sequence across source files, with text timed against the sequence clock and background music synchronised to playback. Source mode previews an individual selection.
+- **Edit existing cuts:** select a sequence clip, change its In/Out points, and choose **Apply trim to selected clip**. Duplicate, split, reorder, delete, undo, and redo remain available.
+- **Named projects:** edit the name in the header. The name is saved with the project and used for the MP4 download.
+- **Safer editing:** imports are serialised, a failed batch releases successfully opened media, editing is locked during export, and cancellation invalidates unfinished preparation work. Invalid text timing and music offsets show actionable errors.
+- **Source audio:** adjust or mute the original audio even without background music.
+
+Sequence preview switches browser video sources at clip boundaries; a brief loading gap may occur between different files. The encoded export joins the normalized clips continuously.
+
 ## Demo
 
 [![Watch the 14-second Spool demo](./demo/title.svg)](./demo/spool-demo.mp4)
@@ -119,13 +131,13 @@ spool/
 ├── src/
 │   ├── services/
 │   │   └── ffmpegEngine.ts # Engine loading, export, cancel, cleanup
-│   ├── App.tsx             # Current export-lab UI and workflow
+│   ├── App.tsx             # Editor UI, preview, and workflow
 │   ├── main.tsx
 │   └── styles.css
 └── vite.config.ts          # Development and production build setup
 ```
 
-As the editor grows, pure timeline logic will live under `src/domain`, feature UI under `src/features`, and runtime-only media handles will remain separate from the serializable project document.
+Pure timeline operations live under `src/domain`, while media export and local persistence are isolated under `src/services`. Runtime media handles remain separate from the persisted project document.
 
 ## Technical choices
 
@@ -158,7 +170,7 @@ These are product limits, not guarantees that every file below them will decode 
 The core first-release workflow is complete. Next up:
 
 1. Support multiple simultaneous text overlays with direct canvas positioning.
-2. Add an audio waveform and timeline-synchronised music preview.
+2. Add an audio waveform and multiple music tracks.
 3. Expand export coverage for silent videos, corrupt inputs, cancellation, and storage limits.
 4. Add more transitions and motion presets while keeping export deterministic.
 5. Deploy the static production build and verify WebAssembly MIME and caching headers.
@@ -173,6 +185,10 @@ npm test
 npm run build
 npm audit --omit=dev
 ```
+
+The integration script discovers Chrome/Chromium on Windows, macOS, and Linux. Set `CHROME_PATH` if your browser is installed elsewhere. Browser automation may require the host environment’s supported QA workflow.
+
+The studio refresh was also verified through a real browser export containing a silent clip, a clip with audio, timed text, and background music. The downloaded MP4 was independently decoded with FFmpeg: 3.000 seconds, H.264 at 1280 × 720, and AAC audio at 48 kHz.
 
 Do not treat a mocked engine test as proof that export works. Release evidence must include a real exported fixture played independently from the editor.
 
