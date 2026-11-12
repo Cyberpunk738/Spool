@@ -10,6 +10,7 @@ export interface PersistedAsset {
 
 export interface PersistedProject {
   schemaVersion: 1
+  name?: string
   assets: PersistedAsset[]
   clips: TimelineClip[]
   preset: 'landscape' | 'portrait' | 'square'
@@ -25,7 +26,14 @@ export interface PersistedProject {
     colour: string
     background: string
   }
-  music?: { name: string; type: string; lastModified: number; blob: Blob; gain: number; offset: number }
+  music?: {
+    name: string
+    type: string
+    lastModified: number
+    blob: Blob
+    gain: number
+    offset: number
+  }
   sourceGain?: number
   updatedAt: string
 }
