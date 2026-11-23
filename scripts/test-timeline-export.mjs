@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
@@ -6,6 +7,8 @@ import { fileURLToPath } from 'node:url'
 import ffmpegPath from 'ffmpeg-static'
 import { chromium } from 'playwright-core'
 
+const appUrl = 'http://127.0.0.1:5173/'
+const studioUrl = new URL('studio/', appUrl).href
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputDir = resolve(root, 'test-results')
 const fixture = resolve(outputDir, 'timeline-fixture.mp4')
@@ -46,7 +49,7 @@ const vite = spawn(process.execPath, [resolve(root, 'node_modules/vite/bin/vite.
 })
 for (let attempt = 0; attempt < 30; attempt += 1) {
   try {
-    if ((await fetch('http://127.0.0.1:5173/')).ok) break
+    if ((await fetch(appUrl)).ok) break
   } catch {
     if (attempt === 29) throw new Error('The local Spool server did not start.')
   }
@@ -77,9 +80,34 @@ try {
   const context = await browser.newContext()
   const page = await context.newPage()
   page.on('console', (message) => console.log(`[browser:${message.type()}] ${message.text()}`))
-  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'networkidle' })
-  await page.locator('input[type="file"]').first().setInputFiles(fixture)
+  await page.goto(appUrl)
+  const workspace = page.getByRole('region', { name: 'Video export workspace' })
+  const openStudio = page.getByRole('main').getByRole('link', { name: 'Open Studio' })
+  await openStudio.waitFor()
+  assert.equal(await workspace.count(), 0)
+  await openStudio.click()
+  await page.waitForURL(studioUrl)
+  await page.getByRole('heading', { name: 'Studio', exact: true }).waitFor()
+  assert.equal(context.pages().length, 1)
+
+  await page.goBack()
+  await page.waitForURL(appUrl)
+  await page.getByRole('contentinfo').getByRole('link', { name: 'Open Studio' }).click()
+  await page.waitForURL(studioUrl)
+  await page.getByRole('link', { name: 'Spool home' }).click()
+  await page.waitForURL(appUrl)
+
+  await page.goto('about:blank')
+  await page.goto(new URL('#studio', appUrl).href)
+  await page.waitForURL(studioUrl)
+  await workspace.locator('input[type="file"]:enabled').first().setInputFiles(fixture)
   await page.getByText('Add selection to timeline').waitFor()
+  const projectName = page.getByRole('textbox', { name: 'Project name' })
+  await projectName.fill('Studio navigation test')
+  await page.getByRole('button', { name: 'Saved locally' }).waitFor()
+  await page.reload()
+  await page.getByText('Add selection to timeline').waitFor()
+  assert.equal(await projectName.inputValue(), 'Studio navigation test')
 
   await page.locator('.inspector').getByRole('spinbutton', { name: 'Start', exact: true }).fill('0')
   await page.locator('.inspector').getByRole('spinbutton', { name: 'End', exact: true }).fill('1.5')

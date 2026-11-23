@@ -47,7 +47,7 @@ for (let attempt = 0; attempt < 30; attempt += 1) {
 const browser = await chromium.launch({ executablePath: chrome, headless: true })
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1200 }, deviceScaleFactor: 1 })
-  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'networkidle' })
+  await page.goto('http://127.0.0.1:5173/studio/', { waitUntil: 'networkidle' })
   await page.locator('input[type="file"]').setInputFiles(fixture)
   await page.locator('.precision-trimmer').waitFor({ state: 'visible' })
   await page.getByText('Add selection to timeline').click()
