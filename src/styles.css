@@ -1,3 +1,10 @@
+@import '@fontsource/manrope/latin-400.css';
+@import '@fontsource/manrope/latin-500.css';
+@import '@fontsource/manrope/latin-600.css';
+@import '@fontsource/manrope/latin-700.css';
+@import '@fontsource/dm-mono/latin-400.css';
+@import '@fontsource/dm-mono/latin-500.css';
+
 :root {
   font-family: Manrope, 'Segoe UI', sans-serif;
   color: #123f35;
@@ -14,10 +21,6 @@
 }
 * {
   box-sizing: border-box;
-}
-html {
-  scroll-behavior: auto;
-  scroll-padding-top: 100px;
 }
 body {
   margin: 0;
@@ -276,26 +279,21 @@ h1 em {
   gap: 6px;
   align-items: center;
 }
+.studio-main {
+  padding-top: 32px;
+}
 .studio-heading {
   display: flex;
   justify-content: space-between;
   gap: 20px;
-  align-items: flex-end;
+  align-items: center;
   margin: 0 0 22px;
-  scroll-margin-top: 110px;
 }
-.section-label {
-  font:
-    9px 'DM Mono',
-    monospace;
-  letter-spacing: 0.09em;
-  color: #70847a;
-}
-.studio-heading h2 {
+.studio-heading h1 {
   font-size: 24px;
   font-weight: 500;
   letter-spacing: -1px;
-  margin: 10px 0 0;
+  margin: 0;
 }
 .studio-badge {
   display: flex;
@@ -1581,12 +1579,15 @@ footer > a:last-child {
   .hero-notes svg {
     width: 11px;
   }
+  .studio-main {
+    padding-top: 24px;
+  }
   .studio-heading {
     align-items: flex-start;
     flex-direction: column;
     gap: 12px;
   }
-  .studio-heading h2 {
+  .studio-heading h1 {
     font-size: 23px;
   }
   .studio-badge {
@@ -1742,9 +1743,6 @@ footer > a:last-child {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
   *,
   *:before,
   *:after {

@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
+import Brand from './Brand'
 import { FfmpegEngine, type ExportStage } from './services/ffmpegEngine'
 import {
   clipTimelineStart,
@@ -176,7 +177,7 @@ async function rasterizeOverlay(overlay: TextOverlay): Promise<{ png: Blob; widt
   return { png, width, height }
 }
 
-export default function App() {
+export default function Studio() {
   const engineRef = useRef<FfmpegEngine | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const musicPreviewRef = useRef<HTMLAudioElement | null>(null)
@@ -870,12 +871,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="Spool home">
-          <span className="brand-mark">
-            <span />
-          </span>
-          <span>spool</span>
-        </a>
+        <Brand />
         <div className="project-name">
           <input
             aria-label="Project name"
@@ -909,41 +905,9 @@ export default function App() {
         </div>
       </header>
 
-      <main>
-        <section className="hero">
-          <div className="eyebrow">
-            <span /> A little less editing. A lot more creating.
-          </div>
-          <h1>
-            Good stories.
-            <br />
-            <em>Beautifully cut.</em>
-          </h1>
-          <p>
-            Turn the moments on your device into something worth sharing.
-            <br className="desktop-break" /> Trim, arrange, add your soundtrack. Keep it all yours.
-          </p>
-          <a className="primary-button hero-cta" href="#studio">
-            Open your studio <ArrowUpRight size={17} />
-          </a>
-          <div className="hero-notes">
-            <span>
-              <ShieldCheck size={14} /> Private by design
-            </span>
-            <span>
-              <Film size={14} /> No sign-up needed
-            </span>
-            <span>
-              <Download size={14} /> Export to MP4
-            </span>
-          </div>
-        </section>
-
-        <div className="studio-heading" id="studio">
-          <div>
-            <span className="section-label">01 / THE STUDIO</span>
-            <h2>A space for your next story.</h2>
-          </div>
+      <main className="studio-main">
+        <div className="studio-heading">
+          <h1>Studio</h1>
           <span className="studio-badge">
             <span />{' '}
             {isWorking
@@ -1705,43 +1669,7 @@ export default function App() {
             </a>
           </section>
         )}
-        <section className="why-spool" aria-label="Why Spool">
-          <div className="why-intro">
-            <span className="section-label">02 / MADE FOR THE MOMENT</span>
-            <h2>
-              Less between you
-              <br />
-              and <span>your next idea.</span>
-            </h2>
-            <p>A focused little studio. Everything you need to make a short video feel like you.</p>
-          </div>
-          <div className="benefit-card">
-            <ShieldCheck size={24} />
-            <strong>
-              100%<span>yours.</span>
-            </strong>
-            <p>Your files stay on your device. From the first import to the final frame.</p>
-          </div>
-          <div className="benefit-card mint">
-            <Film size={24} />
-            <strong>
-              One story.<span>Any canvas.</span>
-            </strong>
-            <p>Landscape, portrait or square. Ready for wherever your story goes next.</p>
-          </div>
-        </section>
       </main>
-
-      <footer>
-        <a className="brand" href="#">
-          <span className="brand-mark">
-            <span />
-          </span>
-          spool
-        </a>
-        <span>Small edits. Lasting moments.</span>
-        <a href="#studio">Back to your studio ↗</a>
-      </footer>
     </div>
   )
 }
